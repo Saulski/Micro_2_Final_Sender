@@ -11,6 +11,9 @@
 // Receiver's custom STA MAC (set this to match the receiver board)
 uint8_t receiver_mac[] = {0x02, 0x00, 0x00, 0xAA, 0xBB, 0x02};
 
+// Track current state: 0 = disarmed, 1 = armed/panic
+int panic_state = 0;
+
 void send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
     printf("Send status: %s\n", status == ESP_NOW_SEND_SUCCESS ? "Success" : "Fail");
 }
@@ -54,13 +57,23 @@ void app_main(void) {
 
     // Configure button
     gpio_set_direction(BUTTON_GPIO, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(BUTTON_GPIO, GPIO_PULLDOWN_ONLY);
 
     while (1) {
         if (gpio_get_level(BUTTON_GPIO)) {
-            char msg[] = "PANIC";
-            esp_now_send(receiver_mac, (uint8_t *)msg, strlen(msg));
+            if (panic_state == 0) {
+                char msg[] = "PANIC";
+                esp_now_send(receiver_mac, (uint8_t *)msg, strlen(msg));
+                panic_state = 1; // now armed
+                printf("Sent PANIC\n");
+            } else {
+                char msg[] = "DISARM";
+                esp_now_send(receiver_mac, (uint8_t *)msg, strlen(msg));
+                panic_state = 0; // now disarmed
+                printf("Sent DISARM\n");
+            }
             vTaskDelay(pdMS_TO_TICKS(1000)); // debounce
         }
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(50)); // poll delay
     }
 }
